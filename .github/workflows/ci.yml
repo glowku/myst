@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # No pip install of the package needed: tests run against the
+      # source tree, and the package has zero dependencies. pytest comes
+      # from the dev extra.
+      - name: Install test runner
+        run: pip install pytest
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+      - name: CLI smoke (import path)
+        run: |
+          python -m myst_persistence --version
+          python -m myst_persistence doctor || true   # doctor may flag absent layer
+
+  standalone:
+    name: standalone script smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build standalone
+        run: python tools/build_standalone.py myst_standalone_ci.py
+      - name: Smoke standalone in a scratch project
+        run: |
+          mkdir /tmp/scratch && cd /tmp/scratch
+          cp "$GITHUB_WORKSPACE/myst_standalone_ci.py" .
+          python myst_standalone_ci.py --version
+          python myst_standalone_ci.py init --name ci-scratch
+          python myst_standalone_ci.py log "ci entry" --kind decision --tags ci
+          python myst_standalone_ci.py verify
+          python myst_standalone_ci.py state --budget 500 >/dev/null
+          python myst_standalone_ci.py status
+
+  e2e:
+    name: end-to-end scenario
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run full agent workflow
+        run: |
+          export PYTHONPATH="$PWD"
+          mkdir /tmp/e2e && cd /tmp/e2e
+          python -m myst_persistence init --name e2e
+          python -m myst_persistence log "db choice" --kind decision \
+            --decision "sqlite embedded" --options "sqlite=zero ops*|pg=powerful" \
+            --tags db,arch
+          python -m myst_persistence log "no RAG" --kind rejection \
+            --rejection "loses why behind choices" --tags arch
+          python -m myst_persistence state --budget 600 >/dev/null
+          python -m myst_persistence verify
+          python -m myst_persistence doctor
+          python -m myst_persistence export out.json
+          python -m myst_persistence consolidate | grep -q proposals || \
+            python -m myst_persistence consolidate | grep -q "no recurring"

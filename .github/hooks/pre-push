@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# myst pre-push hook — refuses to push a tampered cognitive ledger.
+#
+# Install (from the repo root):
+#   cp .github/hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+#
+# Rationale: if .myst/ is shared (committed) in a team repo, a corrupted
+# ledger should block propagation like a failing test would. When the
+# layer is purely local and absent, pushing is unaffected.
+
+set +e
+
+if command -v myst >/dev/null 2>&1; then
+  MYST="myst"
+elif [ -f "./myst_standalone.py" ]; then
+  MYST="python3 ./myst_standalone.py"
+elif python3 -c "import myst_persistence" 2>/dev/null; then
+  MYST="python3 -m myst_persistence"
+else
+  exit 0
+fi
+
+[ -d ".myst" ] || exit 0
+
+OUT=$($MYST verify 2>&1)
+CODE=$?
+if [ $CODE -ne 0 ]; then
+  echo "myst: ledger integrity failure — push aborted" >&2
+  echo "$OUT" >&2
+  exit $CODE
+fi
+exit 0

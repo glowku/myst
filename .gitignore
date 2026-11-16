@@ -1,0 +1,17 @@
+# Myst state is local data, not source code.
+.myst/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.coverage
+# Standalone build artifact
+myst_standalone.py
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

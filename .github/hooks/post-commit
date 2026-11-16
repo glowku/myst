@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# myst post-commit hook — records each commit as an episodic event.
+#
+# Install (from the repo root):
+#   cp .github/hooks/post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+# or, if the package is installed:
+#   myst hook post-commit   (writes the same entry; usable as a manual backfill)
+#
+# Designed to never break a commit: all failures are silent (exit 0).
+# The .myst/ layer is local state — typically gitignored — so this hook
+# keeps the ledger in sync with the developer's actual trajectory.
+
+set +e  # never fail the commit because of us
+
+# Prefer the `myst` console script, fall back to the standalone file,
+# fall back to python -m, fall back to silence.
+if command -v myst >/dev/null 2>&1; then
+  MYST="myst"
+elif [ -f "./myst_standalone.py" ]; then
+  MYST="python3 ./myst_standalone.py"
+elif python3 -c "import myst_persistence" 2>/dev/null; then
+  MYST="python3 -m myst_persistence"
+else
+  exit 0
+fi
+
+# Only log when a layer exists (don't auto-init inside a hook).
+[ -d ".myst" ] || exit 0
+
+$MYST hook post-commit >/dev/null 2>&1 &
+exit 0
