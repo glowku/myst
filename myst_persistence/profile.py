@@ -154,9 +154,10 @@ def _parse_toml(text: str) -> dict:
         if not m:
             raise ValueError("unparseable line %d: %r" % (no, raw))
         key, value = m.group(1), m.group(2)
-        if current is None:
-            raise ValueError("key before any table at line %d" % no)
-        current[key] = _parse_value(value)
+        # Top-level keys (e.g. schema_version) are valid TOML; store them on
+        # the root dict. Table keys go under the current table.
+        target = data if current is None else current
+        target[key] = _parse_value(value)
     return data
 
 
